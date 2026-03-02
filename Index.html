@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chic Fitness Journal</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 引入洋氣的 Google 字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Noto+Serif+TC:wght@300;400;600&display=swap" rel="stylesheet">
+    <!-- 引入 Chart.js 用於體重折線圖 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        chic: ['"Playfair Display"', '"Noto Serif TC"', 'serif'],
+                        sans: ['"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+                    },
+                    colors: {
+                        babyPink: '#ffb6c1',
+                        babyPinkDark: '#ff9eaa',
+                        babyBlue: '#add8e6',
+                        babyBlueDark: '#8cbcd0',
+                        chicDark: '#2c2a29',
+                        chicGray: '#8e8b8a',
+                        tableBorder: '#e5e7eb',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 隱藏滾動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 玻璃擬態 (Glassmorphism) */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+        }
+
+        /* Modal 背景與動畫 */
+        .modal-overlay {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            transform: scale(0.95) translateY(20px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1) translateY(0);
+        }
+
+        /* 漸層動態背景 */
+        .bg-gradient-chic {
+            background: linear-gradient(-45deg, #ffe4e1, #f0f8ff, #fff0f5, #e6f2ff);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+        }
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* --- 習慣打卡表專用樣式 --- */
+        .habit-table-wrapper {
+            overflow-x: auto;
+            border: 1px solid var(--tw-colors-tableBorder);
+            border-radius: 0.5rem;
+            background: white;
+        }
+        .habit-table th, .habit-table td {
+            border: 1px solid var(--tw-colors-tableBorder);
+            padding: 0.25rem;
+            min-width: 32px;
+            height: 32px;
+            text-align: center;
+        }
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            background: #f8f9fa;
+            z-index: 10;
+            min-width: 180px;
+            text-align: left !important;
+            padding-left: 1rem !important;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+        .habit-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 0.875rem;
+            color: #4b5563;
+        }
+        .habit-checkbox {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #d1d5db;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            margin: 0;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .habit-checkbox:checked {
+            background-color: #ffb6c1;
+            border-color: #ffb6c1;
+        }
+        .habit-checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* --- 日期按鈕 (Meals Journal) --- */
+        .date-btn { transition: all 0.3s ease; }
+        .date-btn.active {
+            background-color: #8cbcd0; color: white;
+            box-shadow: 0 4px 10px rgba(140, 188, 208, 0.4);
+            transform: translateY(-2px); border-color: #8cbcd0;
+        }
+
+        /* --- 照片上傳預覽框 --- */
+        .img-upload-box {
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+            transition: all 0.3s ease;
+        }
+        .img-upload-box:hover .upload-icon-overlay { opacity: 1; }
+
+        /* 聊天室動畫 */
+        .chat-hidden { opacity: 0; transform: scale(0.9) translateY(20px); pointer-events: none; }
+        .chat-visible { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            opacity: 0; width: 100%; height: 100%; position: absolute; top: 0; left: 0; cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gradient-chic font-sans text-chicDark h-screen flex flex-col overflow-hidden">
+
+    <!-- 頂部洋氣導覽 -->
+    <header class="h-16 glass-card flex items-center justify-between px-6 md:px-12 sticky top-0 z-10">
+        <div class="text-2xl font-chic font-semibold italic tracking-wide text-chicDark flex items-center">
+            L'Évolution <span class="text-sm font-sans font-normal ml-3 text-chicGray hidden md:inline tracking-widest uppercase">My Fitness Journal</span>
+        </div>
+        <div class="flex items-center space-x-6">
+            <span class="font-chic italic text-chicGray text-sm">Welcome back.</span>
+            <div class="w-8 h-8 rounded-full border-2 border-white overflow-hidden shadow-sm flex items-center justify-center bg-gray-200">
+                <span class="text-[10px] text-gray-500">Me</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 (傳送門儀表板) -->
+    <main class="flex-1 overflow-y-auto w-full pb-24 no-scrollbar px-4 py-8 md:p-10">
+        <div class="max-w-4xl mx-auto space-y-12">
+            <div class="text-center mb-10">
+                <h1 class="text-4xl md:text-5xl font-chic mb-3">Daily Routine.</h1>
+                <p class="text-chicGray tracking-widest uppercase text-xs">Self-discipline is the ultimate elegance</p>
+            </div>
+
+            <!-- 三大功能入口 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- 1. 習慣打卡入口 -->
+                <div onclick="openModal('modal-habits')" class="glass-card rounded-[2rem] p-8 cursor-pointer hover:-translate-y-2 hover:shadow-xl transition-all duration-300 group relative overflow-hidden flex flex-col items-center justify-center text-center h-64 border border-white/60">
+                    <div class="absolute -right-6 -top-6 text-9xl text-babyPink opacity-10 group-hover:scale-110 transition-transform"><i class="fa-solid fa-table-cells"></i></div>
+                    <div class="w-16 h-16 rounded-full bg-white/60 shadow-sm flex items-center justify-center text-2xl text-babyPinkDark mb-4 group-hover:bg-babyPink group-hover:text-white transition-colors"><i class="fa-solid fa-list-check"></i></div>
+                    <h2 class="font-chic text-2xl mb-1">Habit Tracker</h2>
+                    <p class="text-xs text-chicGray uppercase tracking-wider">進入打卡大表</p>
+                </div>
+                <!-- 2. 飲食紀錄入口 -->
+                <div onclick="openModal('modal-meals')" class="glass-card rounded-[2rem] p-8 cursor-pointer hover:-translate-y-2 hover:shadow-xl transition-all duration-300 group relative overflow-hidden flex flex-col items-center justify-center text-center h-64 border border-white/60">
+                    <div class="absolute -right-6 -top-6 text-9xl text-babyBlue opacity-10 group-hover:scale-110 transition-transform"><i class="fa-solid fa-utensils"></i></div>
+                    <div class="w-16 h-16 rounded-full bg-white/60 shadow-sm flex items-center justify-center text-2xl text-babyBlueDark mb-4 group-hover:bg-babyBlue group-hover:text-white transition-colors"><i class="fa-solid fa-camera-retro"></i></div>
+                    <h2 class="font-chic text-2xl mb-1">Meals Journal</h2>
+                    <p class="text-xs text-chicGray uppercase tracking-wider">填寫三餐與照片</p>
+                </div>
+                <!-- 3. 體重追蹤入口 -->
+                <div onclick="openModal('modal-weight')" class="glass-card rounded-[2rem] p-8 cursor-pointer hover:-translate-y-2 hover:shadow-xl transition-all duration-300 group relative overflow-hidden flex flex-col items-center justify-center text-center h-64 border border-white/60">
+                    <div class="absolute -right-6 -top-6 text-9xl text-gray-400 opacity-10 group-hover:scale-110 transition-transform"><i class="fa-solid fa-chart-line"></i></div>
+                    <div class="w-16 h-16 rounded-full bg-white/60 shadow-sm flex items-center justify-center text-2xl text-chicDark mb-4 group-hover:bg-chicDark group-hover:text-white transition-colors"><i class="fa-solid fa-weight-scale"></i></div>
+                    <h2 class="font-chic text-2xl mb-1">Body Metrics</h2>
+                    <p class="text-xs text-chicGray uppercase tracking-wider">查看體重折線圖</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- MODALS -->
+    <!-- ========================================== -->
+    <!-- 1. 打卡習慣大表 -->
+    <div id="modal-habits" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay bg-chicDark/40 backdrop-blur-sm p-4">
+        <div class="bg-white/95 backdrop-blur-xl w-full max-w-[95vw] h-[90vh] rounded-[2rem] p-6 md:p-10 relative shadow-2xl flex flex-col modal-content overflow-hidden border border-white">
+            <button onclick="closeModal('modal-habits')" class="absolute top-6 right-6 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition text-gray-500 z-10"><i class="fa-solid fa-xmark"></i></button>
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 shrink-0 mt-4 md:mt-0">
+                <div>
+                    <h2 class="font-chic text-3xl mb-1 text-babyPinkDark">Habit Tracker</h2>
+                    <p class="text-xs text-chicGray uppercase tracking-widest">Monthly Challenge Grid</p>
+                </div>
+                <div class="mt-4 md:mt-0 flex items-center space-x-2 bg-babyPinkLight/50 p-2 rounded-full border border-pink-100">
+                    <select id="habit-year" class="bg-transparent border-none outline-none font-chic text-lg text-chicDark cursor-pointer font-bold px-2" onchange="renderHabitTable()"></select>
+                    <span class="text-pink-300">/</span>
+                    <select id="habit-month" class="bg-transparent border-none outline-none font-chic text-lg text-chicDark cursor-pointer font-bold px-2" onchange="renderHabitTable()"></select>
+                </div>
+            </div>
+            <div class="habit-table-wrapper flex-1 no-scrollbar pb-4 relative">
+                <table class="habit-table w-full text-xs font-sans border-collapse" id="habit-table"></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 飲食紀錄 -->
+    <div id="modal-meals" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay bg-chicDark/40 backdrop-blur-sm p-4">
+        <div class="bg-[#fdfbfb] w-full max-w-4xl rounded-[2rem] p-6 md:p-10 relative shadow-2xl modal-content flex flex-col max-h-[90vh] overflow-hidden border border-white">
+            <button onclick="closeModal('modal-meals')" class="absolute top-6 right-6 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition text-gray-500 z-20"><i class="fa-solid fa-xmark"></i></button>
+            <div class="shrink-0 mb-6 mt-2">
+                <h2 class="font-chic text-3xl mb-1 text-babyBlueDark text-center">Meals Journal</h2>
+                <div class="flex items-center space-x-3 overflow-x-auto no-scrollbar pb-4 px-2 mt-4" id="date-strip"></div>
+                <div class="text-center text-xs font-chic text-babyBlueDark italic mt-2" id="selected-date-display"></div>
+            </div>
+            <div class="flex-1 overflow-y-auto no-scrollbar px-2 space-y-6 pb-6">
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6">
+                    <div class="flex-1 flex flex-col"><div class="flex items-center mb-3"><div class="w-8 h-8 rounded-full bg-babyBlueLight text-babyBlueDark flex items-center justify-center mr-3"><i class="fa-solid fa-mug-saucer text-sm"></i></div><h3 class="font-chic text-xl">Breakfast</h3></div><textarea class="flex-1 bg-gray-50/50 border border-gray-200 rounded-2xl p-4 text-sm text-chicDark focus:outline-none focus:border-babyBlue transition shadow-inner resize-none min-h-[100px]" placeholder="今天早上吃了什麼呢？"></textarea></div>
+                    <div class="w-full md:w-48 h-32 md:h-auto shrink-0 relative"><input type="file" id="img-breakfast" class="hidden" accept="image/*" onchange="previewImage(this, 'preview-breakfast')"><label for="img-breakfast" class="img-upload-box cursor-pointer w-full h-full rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 text-gray-400 hover:border-babyBlue hover:text-babyBlue transition overflow-hidden relative group" id="preview-breakfast"><i class="fa-solid fa-camera text-2xl mb-2"></i><span class="text-xs font-sans">Upload Photo</span><div class="upload-icon-overlay absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 transition text-white"><i class="fa-solid fa-pen"></i></div></label></div>
+                </div>
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6">
+                    <div class="flex-1 flex flex-col"><div class="flex items-center mb-3"><div class="w-8 h-8 rounded-full bg-green-50 text-green-500 flex items-center justify-center mr-3"><i class="fa-solid fa-bowl-food text-sm"></i></div><h3 class="font-chic text-xl">Lunch</h3></div><textarea class="flex-1 bg-gray-50/50 border border-gray-200 rounded-2xl p-4 text-sm text-chicDark focus:outline-none focus:border-green-300 transition shadow-inner resize-none min-h-[100px]" placeholder="午餐吃了什麼？"></textarea></div>
+                    <div class="w-full md:w-48 h-32 md:h-auto shrink-0 relative"><input type="file" id="img-lunch" class="hidden" accept="image/*" onchange="previewImage(this, 'preview-lunch')"><label for="img-lunch" class="img-upload-box cursor-pointer w-full h-full rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 text-gray-400 hover:border-green-300 hover:text-green-500 transition overflow-hidden relative group" id="preview-lunch"><i class="fa-solid fa-camera text-2xl mb-2"></i><span class="text-xs font-sans">Upload Photo</span><div class="upload-icon-overlay absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 transition text-white"><i class="fa-solid fa-pen"></i></div></label></div>
+                </div>
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6">
+                    <div class="flex-1 flex flex-col"><div class="flex items-center mb-3"><div class="w-8 h-8 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center mr-3"><i class="fa-solid fa-utensils text-sm"></i></div><h3 class="font-chic text-xl">Dinner</h3></div><textarea class="flex-1 bg-gray-50/50 border border-gray-200 rounded-2xl p-4 text-sm text-chicDark focus:outline-none focus:border-purple-300 transition shadow-inner resize-none min-h-[100px]" placeholder="晚餐盡量清淡喔！"></textarea></div>
+                    <div class="w-full md:w-48 h-32 md:h-auto shrink-0 relative"><input type="file" id="img-dinner" class="hidden" accept="image/*" onchange="previewImage(this, 'preview-dinner')"><label for="img-dinner" class="img-upload-box cursor-pointer w-full h-full rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 text-gray-400 hover:border-purple-300 hover:text-purple-500 transition overflow-hidden relative group" id="preview-dinner"><i class="fa-solid fa-camera text-2xl mb-2"></i><span class="text-xs font-sans">Upload Photo</span><div class="upload-icon-overlay absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 transition text-white"><i class="fa-solid fa-pen"></i></div></label></div>
+                </div>
+            </div>
+            <button class="mt-4 shrink-0 w-full bg-chicDark text-white font-chic text-lg py-4 rounded-full hover:bg-gray-800 transition shadow-lg">Save Record</button>
+        </div>
+    </div>
+
+    <!-- 3. 體重折線圖 -->
+    <div id="modal-weight" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay bg-chicDark/40 backdrop-blur-sm p-4">
+        <div class="bg-white/95 backdrop-blur-xl w-full max-w-4xl rounded-[2rem] p-6 md:p-10 relative shadow-2xl modal-content border border-white flex flex-col">
+            <button onclick="closeModal('modal-weight')" class="absolute top-6 right-6 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition text-gray-500"><i class="fa-solid fa-xmark"></i></button>
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 mt-4 md:mt-0">
+                <div><h2 class="font-chic text-3xl mb-1">Body Metrics</h2><p class="text-xs text-chicGray uppercase tracking-widest">Weight Line Chart</p></div>
+                <div class="mt-4 md:mt-0 bg-gray-50 px-4 py-2 rounded-full border border-gray-200 flex items-center space-x-2">
+                    <i class="fa-regular fa-calendar-days text-gray-500 mr-2"></i>
+                    <select id="weight-year" class="bg-transparent border-none outline-none font-chic text-lg text-chicDark cursor-pointer font-bold" onchange="updateChartData()"></select>
+                    <span class="text-gray-300">/</span>
+                    <select id="weight-month" class="bg-transparent border-none outline-none font-chic text-lg text-chicDark cursor-pointer font-bold" onchange="updateChartData()"></select>
+                </div>
+            </div>
+            <div class="flex justify-center mb-8">
+                <div class="bg-white border border-gray-200 p-2 md:pl-6 md:pr-2 py-2 rounded-full flex flex-col md:flex-row items-center shadow-md gap-4 md:gap-0">
+                    <div class="relative flex items-center bg-gray-50 px-4 py-2 rounded-full hover:bg-gray-100 transition cursor-pointer">
+                        <i class="fa-regular fa-calendar text-babyPinkDark mr-2"></i>
+                        <span id="display-weight-date" class="font-chic text-sm text-chicDark font-bold pointer-events-none">Mar 02, 2026</span>
+                        <input type="date" id="input-weight-date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="updateWeightDateDisplay(this)">
+                    </div>
+                    <div class="hidden md:block w-px h-6 bg-gray-200 mx-4"></div>
+                    <div class="flex items-center">
+                        <span class="font-chic text-gray-400 mr-3 text-sm hidden md:inline">Weight:</span>
+                        <input type="number" step="0.1" placeholder="00.0" class="bg-transparent border-none outline-none focus:ring-0 text-center font-bold text-2xl w-24 py-0 text-chicDark placeholder-gray-300">
+                        <span class="text-sm text-gray-400 ml-1 font-chic mr-4">kg</span>
+                        <button class="bg-chicDark text-white px-6 py-2 rounded-full text-sm font-chic tracking-wider hover:bg-gray-800 transition shadow-sm">Record</button>
+                    </div>
+                </div>
+            </div>
+            <div class="w-full h-[300px] md:h-[400px] relative"><canvas id="weightChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- AI 真實陪聊懸浮聊天室 (自動連線，免設定) -->
+    <!-- ========================================== -->
+    <div id="chat-window" class="fixed bottom-24 right-6 w-80 md:w-[350px] glass-card rounded-[2rem] shadow-2xl flex flex-col z-40 chat-hidden border border-white" style="height: 520px; max-height: 75vh;">
+        
+        <!-- Header: 可更換頭像 -->
+        <div class="bg-white/70 border-b border-white/50 p-4 rounded-t-[2rem] flex justify-between items-center relative">
+            <div class="flex items-center">
+                <!-- 頭像上傳區 -->
+                <div class="relative group cursor-pointer mr-3">
+                    <input type="file" id="ai-avatar-upload" class="hidden" accept="image/*" onchange="handleAiAvatarUpload(this)">
+                    <label for="ai-avatar-upload" class="w-12 h-12 rounded-full border-2 border-white overflow-hidden flex items-center justify-center shadow-sm cursor-pointer block relative">
+                        <!-- 預設頭像 (點擊可更換) -->
+                        <img id="header-ai-avatar" src="https://placehold.co/150x150/ffb6c1/fff?text=%E6%88%B0" class="w-full h-full object-cover ai-avatar-class">
+                        <div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fa-solid fa-camera text-white text-xs"></i>
+                        </div>
+                    </label>
+                    <span class="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-white rounded-full"></span>
+                </div>
+                
+                <div>
+                    <div class="font-chic font-semibold text-base text-chicDark">戰哥 (Xiao Zhan)</div>
+                    <div class="text-[10px] text-gray-400 uppercase tracking-widest flex items-center">
+                        <span class="mr-1"><i class="fa-solid fa-robot text-babyBlue"></i></span> Online Companion
+                    </div>
+                </div>
+            </div>
+            <button onclick="toggleChat()" class="text-gray-400 hover:text-chicDark transition w-8 h-8 rounded-full hover:bg-white/50 flex items-center justify-center">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+
+        <!-- 聊天訊息區 -->
+        <div id="chat-messages" class="flex-1 overflow-y-auto p-5 space-y-4 bg-transparent no-scrollbar">
+            <!-- 初始問候語 -->
+            <div class="flex items-end max-w-[85%]">
+                <img src="https://placehold.co/150x150/ffb6c1/fff?text=%E6%88%B0" class="w-8 h-8 rounded-full border border-gray-200 mr-2 object-cover shrink-0 ai-avatar-class shadow-sm">
+                <div class="bg-white/80 backdrop-blur-md p-4 rounded-2xl rounded-bl-none text-sm text-chicDark shadow-sm border border-white/50 leading-relaxed">
+                    哈囉！我是戰哥。今天過得好嗎？不管是減肥上的困難，還是生活中的小事，隨時都可以跟我分享喔！✨ (點擊上方頭像可以放你喜歡的我的照片喔)
+                </div>
+            </div>
+        </div>
+
+        <!-- 輸入區 -->
+        <div class="p-4 bg-white/60 rounded-b-[2rem] border-t border-white/50">
+            <div class="flex items-center bg-white/90 rounded-full px-4 py-2 border border-white shadow-inner">
+                <input type="text" id="chat-input" placeholder="和戰哥聊聊..." class="flex-1 bg-transparent text-sm focus:outline-none font-sans" onkeypress="handleEnter(event)">
+                <button onclick="sendUserMessage()" class="ml-2 w-8 h-8 bg-chicDark text-white rounded-full flex items-center justify-center hover:bg-gray-800 transition shrink-0 shadow-md">
+                    <i class="fa-solid fa-arrow-up text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 懸浮觸發按鈕 -->
+    <button onclick="toggleChat()" id="chat-toggle-btn" class="fixed bottom-8 right-8 w-14 h-14 rounded-full shadow-xl bg-chicDark text-white flex items-center justify-center hover:scale-110 transition-transform z-30 group border-2 border-white/50">
+        <i class="fa-regular fa-comment-dots text-xl"></i>
+        <span class="absolute top-0 right-0 w-3 h-3 bg-green-400 border-2 border-white rounded-full animate-pulse"></span>
+    </button>
+
+
+    <!-- ========================================== -->
+    <!-- JavaScript 邏輯 (包含真實連線) -->
+    <!-- ========================================== -->
+    <script>
+        // --- 全域變數 ---
+        const currentYear = 2026;
+        const currentMonth = 3; 
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        let aiAvatarSrc = "https://placehold.co/150x150/ffb6c1/fff?text=%E6%88%B0";
+        
+        // 這是由系統環境自動提供的，不需手動填寫！
+        const apiKey = ""; 
+
+        window.onload = () => {
+            initSelects();
+            initDateStrip();
+            setInitialWeightDate();
+        };
+
+        // --- 表單與 UI 邏輯 (與上版相同) ---
+        function initSelects() {
+            const yearSelects = [document.getElementById('habit-year'), document.getElementById('weight-year')];
+            const monthSelects = [document.getElementById('habit-month'), document.getElementById('weight-month')];
+            let yearHtml = ''; for(let y = 2026; y <= 2030; y++) yearHtml += `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`;
+            let monthHtml = ''; monthNames.forEach((m, index) => { let val = index + 1; monthHtml += `<option value="${val}" ${val === currentMonth ? 'selected' : ''}>${m}</option>`; });
+            yearSelects.forEach(sel => sel.innerHTML = yearHtml);
+            monthSelects.forEach(sel => sel.innerHTML = monthHtml);
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+            if(modalId === 'modal-habits') renderHabitTable();
+            else if (modalId === 'modal-weight') initChart();
+        }
+        function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
+
+        const habitsList = ["Drink 2000cc water", "Read for 30 min", "Walk 10,000 steps", "Workout / Cardio", "No sugar today"];
+        function getDaysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
+
+        function renderHabitTable() {
+            const table = document.getElementById('habit-table');
+            const year = parseInt(document.getElementById('habit-year').value);
+            const month = parseInt(document.getElementById('habit-month').value);
+            const daysInMonth = getDaysInMonth(year, month);
+            
+            let html = `<thead><tr class="bg-gray-50 border-b border-gray-200"><th class="sticky-col uppercase tracking-widest text-[10px] font-bold text-chicGray">Daily Habits</th>`;
+            for(let i=1; i<=daysInMonth; i++) html += `<th class="font-normal text-gray-500 w-8 font-chic">${i}</th>`;
+            html += `</tr></thead><tbody id="habit-tbody">`;
+
+            habitsList.forEach((habit) => {
+                html += `<tr><td class="sticky-col font-chic"><input type="text" class="habit-input" value="${habit}"></td>`;
+                for(let i=1; i<=daysInMonth; i++) {
+                    const isChecked = Math.random() > 0.8 ? 'checked' : ''; 
+                    html += `<td><input type="checkbox" class="habit-checkbox" data-col="${i}" onchange="calculateHabitStats(${daysInMonth})" ${isChecked}></td>`;
+                }
+                html += `</tr>`;
+            });
+
+            html += `</tbody><tfoot class="bg-gray-50/50 font-chic font-bold text-gray-600 border-t border-gray-200"><tr><td class="sticky-col text-[10px] uppercase tracking-wider text-chicGray">Complete for the day</td>`;
+            for(let i=1; i<=daysInMonth; i++) html += `<td id="count-col-${i}">0</td>`;
+            html += `</tr><tr><td class="sticky-col text-[10px] uppercase tracking-wider text-babyPinkDark">Percent Complete</td>`;
+            for(let i=1; i<=daysInMonth; i++) html += `<td id="percent-col-${i}" class="text-babyPinkDark text-[10px]">0%</td>`;
+            html += `</tr></tfoot>`;
+
+            table.innerHTML = html;
+            calculateHabitStats(daysInMonth);
+        }
+
+        function calculateHabitStats(daysInMonth) {
+            const totalHabits = habitsList.length;
+            for(let i=1; i<=daysInMonth; i++) {
+                const checkboxes = document.querySelectorAll(`.habit-checkbox[data-col="${i}"]`);
+                let checkedCount = 0; checkboxes.forEach(cb => { if(cb.checked) checkedCount++; });
+                document.getElementById(`count-col-${i}`).innerText = checkedCount;
+                const percent = Math.round((checkedCount / totalHabits) * 100);
+                const percentCell = document.getElementById(`percent-col-${i}`);
+                percentCell.innerText = `${percent}%`;
+                if(percent === 100) percentCell.classList.add('bg-babyPinkLight', 'text-babyPinkDark');
+                else percentCell.classList.remove('bg-babyPinkLight', 'text-babyPinkDark');
+            }
+        }
+
+        function initDateStrip() {
+            const strip = document.getElementById('date-strip');
+            const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+            const today = 2; 
+            let html = '';
+            for(let i=1; i<=daysInMonth; i++) {
+                const dateObj = new Date(currentYear, currentMonth - 1, i);
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                const isActive = (i === today) ? 'active' : 'bg-white text-chicGray border-gray-200 hover:border-babyBlue hover:text-babyBlueDark';
+                html += `<button onclick="selectMealDate(${i}, this)" class="date-btn flex flex-col items-center justify-center min-w-[50px] h-[70px] rounded-2xl border ${isActive} shrink-0 shadow-sm"><span class="text-[10px] uppercase font-bold mb-1">${dayName}</span><span class="font-chic text-xl leading-none">${i}</span></button>`;
+            }
+            strip.innerHTML = html;
+            document.getElementById('selected-date-display').innerText = `${monthNames[currentMonth-1]} 2, ${currentYear}`;
+        }
+
+        function selectMealDate(day, btnElement) {
+            document.querySelectorAll('.date-btn').forEach(btn => { btn.classList.remove('active'); btn.classList.add('bg-white', 'text-chicGray', 'border-gray-200'); });
+            btnElement.classList.remove('bg-white', 'text-chicGray', 'border-gray-200'); btnElement.classList.add('active');
+            document.getElementById('selected-date-display').innerText = `${monthNames[currentMonth-1]} ${day}, ${currentYear}`;
+            ['breakfast', 'lunch', 'dinner'].forEach(meal => {
+                const preview = document.getElementById(`preview-${meal}`);
+                preview.style.backgroundImage = 'none';
+                preview.innerHTML = `<i class="fa-solid fa-camera text-2xl mb-2"></i><span class="text-xs font-sans">Upload Photo</span><div class="upload-icon-overlay absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 transition text-white"><i class="fa-solid fa-pen"></i></div>`;
+            });
+        }
+
+        function previewImage(input, previewId) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewBox = document.getElementById(previewId);
+                    previewBox.style.backgroundImage = `url(${e.target.result})`;
+                    previewBox.innerHTML = `<div class="upload-icon-overlay absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 transition text-white"><i class="fa-solid fa-pen text-xl mb-1"></i><span class="text-xs">Change Photo</span></div>`;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function setInitialWeightDate() {
+            const dateInput = document.getElementById('input-weight-date');
+            dateInput.value = "2026-03-02";
+            updateWeightDateDisplay(dateInput);
+        }
+
+        function updateWeightDateDisplay(input) {
+            if(input.value) {
+                const date = new Date(input.value);
+                const formatted = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                document.getElementById('display-weight-date').innerText = formatted;
+            }
+        }
+
+        let weightChartInstance = null;
+        function initChart() {
+            const ctx = document.getElementById('weightChart').getContext('2d');
+            if(weightChartInstance) weightChartInstance.destroy();
+            weightChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['1st', '5th', '10th', '15th', '20th', '25th', '30th'],
+                    datasets: [{
+                        label: 'Weight (kg)', data: [55.5, 55.2, 54.8, 54.9, 54.3, 54.0, 53.8],
+                        borderColor: '#ffb6c1', backgroundColor: 'rgba(255, 182, 193, 0.2)', borderWidth: 3, pointBackgroundColor: '#fff', pointBorderColor: '#ffb6c1', pointBorderWidth: 2, pointRadius: 5, fill: true, tension: 0.4 
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                    scales: { x: { grid: { display: false }, ticks: { font: { family: '"Playfair Display", serif' }, color: '#8e8b8a' } }, y: { grid: { color: '#f3f4f6', borderDash: [5, 5] }, ticks: { font: { family: '"Playfair Display", serif' }, color: '#8e8b8a' } } }
+                }
+            });
+        }
+        function updateChartData() {
+            if(weightChartInstance) {
+                const newData = weightChartInstance.data.datasets[0].data.map(val => val + (Math.random() - 0.5));
+                weightChartInstance.data.datasets[0].data = newData;
+                weightChartInstance.update();
+            }
+        }
+
+        // --- 聊天室與 AI 核心邏輯 ---
+        const chatWindow = document.getElementById('chat-window');
+        const chatToggleBtn = document.getElementById('chat-toggle-btn');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+
+        // 上傳自訂頭像 (模仿肖戰)
+        function handleAiAvatarUpload(input) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    aiAvatarSrc = e.target.result;
+                    const avatars = document.querySelectorAll('.ai-avatar-class');
+                    avatars.forEach(img => { img.src = aiAvatarSrc; });
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function toggleChat() {
+            if (chatWindow.classList.contains('chat-hidden')) {
+                chatWindow.classList.remove('chat-hidden'); chatWindow.classList.add('chat-visible');
+                chatToggleBtn.style.transform = 'scale(0)'; setTimeout(() => chatInput.focus(), 300);
+            } else {
+                chatWindow.classList.add('chat-hidden'); chatWindow.classList.remove('chat-visible');
+                chatToggleBtn.style.transform = 'scale(1)';
+            }
+        }
+
+        function handleEnter(e) { if (e.key === 'Enter') sendUserMessage(); }
+
+        async function sendUserMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            
+            appendMessage('user', text);
+            chatInput.value = '';
+
+            // 顯示正在輸入的點點點動畫
+            const typingId = appendMessage('ai', '<span class="flex space-x-1 items-center h-4 opacity-50"><span class="w-1.5 h-1.5 bg-chicDark rounded-full animate-bounce"></span><span class="w-1.5 h-1.5 bg-chicDark rounded-full animate-bounce" style="animation-delay: 0.1s"></span><span class="w-1.5 h-1.5 bg-chicDark rounded-full animate-bounce" style="animation-delay: 0.2s"></span></span>');
+
+            // 呼叫真實 API
+            const aiResponseText = await callGeminiAPI(text);
+            
+            // 移除點點點，顯示真實文字
+            document.getElementById(typingId).remove();
+            appendMessage('ai', aiResponseText);
+        }
+
+        // 串接真實 API (無限制自由聊天)
+        async function callGeminiAPI(userQuery) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            // 賦予他肖戰的靈魂設定
+            const systemPrompt = "請你扮演藝人肖戰（Xiao Zhan）。你的個性溫暖、有禮貌、內心強大、極度自律且充滿正能量。你現在是使用者的專屬陪伴者與減肥教練。請用溫柔、堅定、像親切的大哥哥一樣的語氣與使用者聊天。當她累了給予鼓勵，當她想放棄時溫柔地提醒她目標。你可以和她聊任何日常話題，不僅限於減肥。請使用繁體中文回覆，語氣自然不造作。";
+            
+            const payload = {
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: [{ parts: [{ text: userQuery }] }]
+            };
+
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i < delays.length; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "抱歉，我剛剛恍神了，能再說一次嗎？";
+                } catch (error) {
+                    if (i === delays.length - 1) {
+                        return "剛才片場訊號不太好，請稍後再跟我說一次好嗎？";
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delays[i]));
+                }
+            }
+        }
+
+        function appendMessage(sender, text) {
+            const msgDiv = document.createElement('div');
+            if (sender === 'user') {
+                msgDiv.className = 'flex justify-end';
+                msgDiv.innerHTML = `<div class="bg-chicDark text-white px-5 py-3 rounded-2xl rounded-br-none max-w-[85%] text-sm font-sans leading-relaxed shadow-sm">${text}</div>`;
+            } else {
+                msgDiv.className = 'flex items-end max-w-[85%]';
+                msgDiv.innerHTML = `
+                    <img src="${aiAvatarSrc}" class="w-8 h-8 rounded-full border border-gray-200 mr-2 object-cover shrink-0 ai-avatar-class shadow-sm">
+                    <div class="bg-white/80 backdrop-blur-md p-4 rounded-2xl rounded-bl-none text-sm text-chicDark shadow-sm border border-white/50 leading-relaxed">${text}</div>
+                `;
+            }
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return msgDiv.id = 'msg-' + Date.now();
+        }
+    </script>
+</body>
+</html>
